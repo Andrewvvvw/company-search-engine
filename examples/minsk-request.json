@@ -1,0 +1,28 @@
+{
+  "original_request": "Найди 100 производителей мебели в Минске. Нужны название, сайт и телефон, 5 листов по 20.",
+  "geography": "Минск, Беларусь",
+  "industry": "Производители мебели",
+  "quota": 100,
+  "batch_size": 20,
+  "fields": [
+    {
+      "key": "name",
+      "label": "Название"
+    },
+    {
+      "key": "website",
+      "label": "Сайт"
+    },
+    {
+      "key": "phone",
+      "label": "Телефон"
+    }
+  ],
+  "named_contact": false,
+  "allowed_roles": [],
+  "uniqueness": "company",
+  "evidence_policy": "Официальные сайты и подтверждённая действующая география/отрасль",
+  "independent_review_required": false,
+  "max_evidence_age_days": 30,
+  "demo": false
+}

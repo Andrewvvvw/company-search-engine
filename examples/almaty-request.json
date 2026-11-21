@@ -1,0 +1,47 @@
+{
+  "original_request": "Найди 50 стоматологических клиник Алматы. Нужны адрес, телефон и подтверждённый рабочий email действующего директора. Итог — один Excel, пять листов по десять.",
+  "geography": "Алматы, Казахстан",
+  "industry": "Стоматологические клиники",
+  "quota": 50,
+  "batch_size": 10,
+  "fields": [
+    {
+      "key": "name",
+      "label": "Название"
+    },
+    {
+      "key": "city",
+      "label": "Город"
+    },
+    {
+      "key": "address",
+      "label": "Адрес"
+    },
+    {
+      "key": "phone",
+      "label": "Телефон"
+    },
+    {
+      "key": "person",
+      "label": "ФИО"
+    },
+    {
+      "key": "role",
+      "label": "Должность"
+    },
+    {
+      "key": "email",
+      "label": "Рабочий email директора"
+    }
+  ],
+  "named_contact": true,
+  "allowed_roles": [
+    "директор",
+    "генеральный директор"
+  ],
+  "uniqueness": "company",
+  "evidence_policy": "Первичные открытые источники, действующий директор, опубликованный рабочий email прямо связан с человеком",
+  "independent_review_required": false,
+  "max_evidence_age_days": 30,
+  "demo": false
+}
