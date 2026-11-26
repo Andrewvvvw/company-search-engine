@@ -110,6 +110,46 @@ class SearchAgentTests(unittest.TestCase):
         card = agent.review(card, 'independent-auditor', independent=True)
         self.assertEqual(len(agent.records_for_export(card)), 1)
 
+    def test_partial_email_search_saves_accepted_records_before_final_review(self):
+        req = request(50, named=False)
+        req['fields'].append({'key': 'email', 'label': 'Email'})
+        req['uniqueness'] = 'branch'
+        complete, incomplete = candidate(1, req), candidate(2, req)
+        for op in (complete, incomplete):
+            number = op['entity_id'].split('-')[-1]
+            payload = op['payload']
+            payload['identity']['branch_id'] = op['entity_id']
+            payload['fields']['email']['value'] = f'info@clinic{number}.example'
+            payload['fields']['email']['sources'][0]['quote'] = payload['fields']['email']['value']
+            payload['contact'] = {'email_kind': 'general', 'current_role': False, 'person_email_link': False}
+        confirmed_second = copy.deepcopy(incomplete)
+        incomplete['payload']['state'] = 'needs_review'
+        incomplete['payload']['reason'] = 'Не найден опубликованный email'
+        incomplete['payload']['fields'].pop('email')
+        card = agent.new_card(req, 'CSA-PARTIAL-EMAIL-0001')
+        with tempfile.TemporaryDirectory() as root:
+            store = agent.Store(root)
+            store.save(agent.apply_operations(card, [complete, incomplete, segment(1)]))
+            resumed = agent.Store(root).read(card['code'])
+            self.assertEqual(resumed['derived']['accepted_ids'], [complete['entity_id']])
+            self.assertEqual(resumed['derived']['candidate_ids'], [incomplete['entity_id']])
+            self.assertEqual(resumed['derived']['remaining'], 49)
+            self.assertFalse(resumed['derived']['review_ok'])
+            self.assertEqual(resumed['derived']['status'], 'open')
+            self.assertEqual(len([e for e in resumed['events'] if e['kind'] == 'candidate']), 2)
+            with self.assertRaises(agent.Invalid):
+                agent.records_for_export(resumed)
+            store.save(agent.apply_operations(resumed, [confirmed_second]))
+            completed = subprocess.run(
+                [sys.executable, str(SPEC.origin), 'status', '--root', root, '--code', card['code']],
+                capture_output=True, text=True, check=True)
+            state = json.loads(completed.stdout)
+            self.assertEqual(state['accepted_count'], 2)
+            self.assertEqual(state['remaining'], 48)
+            self.assertEqual(state['candidate_ids'], [])
+            self.assertFalse(state['review_ok'])
+            self.assertEqual(state['status'], 'open')
+
     def test_parallel_merge_is_lossless_idempotent_and_conflict_safe(self):
         base = self.card()
         left = agent.apply_operations(base, [candidate(2)])

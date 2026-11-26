@@ -26,6 +26,7 @@ python3 -m unittest discover -s tests -v
 | `test_branches_can_share_operator_with_documented_contacts` | Разные филиалы могут иметь одно юридическое лицо при выбранном учёте по филиалам |
 | `test_rejection_at_quota_requires_replacement_and_new_review` | После отклонения принятой строки нужен добор, а после замены — новая проверка итогового набора |
 | `test_independent_acceptance_is_a_separate_gate` | При обязательной независимой проверке обычного `review` недостаточно для экспорта |
+| `test_partial_email_search_saves_accepted_records_before_final_review` | При квоте 50 проверенная компания с общим email сохраняется сразу; неполная остаётся кандидатом. После восстановления и подтверждения второй записи счётчик растёт до 2 без финального review, итоговый экспорт при недоборе запрещён |
 
 ## Сохранение и версии
 
