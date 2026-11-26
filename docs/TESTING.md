@@ -16,6 +16,10 @@ python3 -m unittest discover -s tests -v
 | `test_coverage_and_stale_or_missing_evidence` | Проверки отклоняют устаревшую или будущую дату, плохой URL, неподтверждённое место и отсутствие данных юридического лица |
 | `test_real_mode_rejects_fixture_sources` | В реальном режиме нельзя использовать вымышленные адреса `.example` |
 | `test_malformed_contact_record_fails_closed` | Неверная структура записи возвращает ошибки проверки |
+| `test_general_email_requires_exact_published_value` | Общий email должен иметь корректный формат и целиком присутствовать в цитате; похожий или более длинный адрес не подходит |
+| `test_named_email_designated_source_preserves_punctuation` | Именной адрес должен точно совпадать в указанном источнике, даже если другой источник содержит правильный email |
+| `test_unresolved_evidence_conflict_blocks_acceptance_and_export` | Неразрешённое расхождение не даёт принять строку и выпустить Excel; исправление сохраняется в истории и требует новой итоговой проверки |
+| `test_malformed_evidence_conflicts_fail_closed` | Неверный формат списка расхождений возвращает ошибку проверки |
 
 ## Контакты и уникальность
 
@@ -23,6 +27,7 @@ python3 -m unittest discover -s tests -v
 | --- | --- |
 | `test_general_former_owner_and_unlinked_email_do_not_count` | Общий email, бывшая должность, неразрешённый владелец и отсутствие связи имени с email не дают принять запись |
 | `test_dedup_registration_brand_and_contacts` | Совпадения регистрационного номера, юридического лица, бренда, телефона и названия обнаруживаются |
+| `test_email_dedup_preserves_punctuation` | Точки, дефисы, подчёркивания и `+` различают email; регистр не мешает обнаружить повтор |
 | `test_branches_can_share_operator_with_documented_contacts` | Разные филиалы могут иметь одно юридическое лицо при выбранном учёте по филиалам |
 | `test_rejection_at_quota_requires_replacement_and_new_review` | После отклонения принятой строки нужен добор, а после замены — новая проверка итогового набора |
 | `test_independent_acceptance_is_a_separate_gate` | При обязательной независимой проверке обычного `review` недостаточно для экспорта |

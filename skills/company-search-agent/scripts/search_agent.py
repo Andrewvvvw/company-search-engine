@@ -21,6 +21,7 @@ PKG = 'http://schemas.openxmlformats.org/package/2006/relationships'
 CODE = re.compile(r'CSA-[A-Z0-9-]{6,60}\Z')
 KINDS = {'candidate', 'segment', 'coverage', 'note', 'review', 'export'}
 GENERIC_EMAIL = re.compile(r'^(info|contact|contacts|office|reception|admin|support|sales|hello|mail|clinic|stom|priem|приемная)([._+-]|\d|$)', re.I)
+EMAIL = re.compile(r"[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+")
 
 
 class Invalid(ValueError):
@@ -62,6 +63,13 @@ def atomic_json(path, value):
 
 def norm(value):
     return re.sub(r'[^\w]', '', str(value).casefold().replace('ё', 'е'))
+
+
+def email_in_quote(email, quote):
+    if not isinstance(quote, str):
+        return False
+    value = email.strip().casefold()
+    return any(value in {m.group().casefold(), m.group().strip("'`").casefold()} for m in EMAIL.finditer(quote))
 
 
 def valid_url(value, demo=False):
@@ -146,6 +154,19 @@ def record_errors(record, request):
         else:
             for source in sources:
                 errors.extend(key + ': ' + e for e in source_errors(source, request))
+        if key == 'email':
+            email = field['value'].strip()
+            if not EMAIL.fullmatch(email):
+                errors.append('email: invalid email')
+            elif not isinstance(sources, list) or not any(
+                isinstance(source, dict) and email_in_quote(email, source.get('quote')) for source in sources
+            ):
+                errors.append('email: quote must contain the exact email')
+    evidence_conflicts = record.get('evidence_conflicts', [])
+    if not isinstance(evidence_conflicts, list) or any(not isinstance(reason, str) or not reason.strip() for reason in evidence_conflicts):
+        errors.append('evidence_conflicts must be a list of nonempty reasons')
+    else:
+        errors.extend('unresolved evidence conflict: ' + reason for reason in evidence_conflicts)
     scope = record.get('scope_evidence', {})
     if not isinstance(scope, dict):
         return errors + ['scope_evidence must be an object']
@@ -183,8 +204,6 @@ def record_errors(record, request):
         if contact.get('current_role') is not True:
             errors.append('current role not confirmed')
         email = values['email']
-        if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', email):
-            errors.append('invalid email')
         if GENERIC_EMAIL.match(email.split('@')[0]):
             errors.append('generic email is forbidden')
         if contact.get('email_kind') != 'person_work' or contact.get('person_email_link') is not True:
@@ -195,7 +214,11 @@ def record_errors(record, request):
         ):
             sources = named[field_key].get('sources') or []
             matching = [s for s in sources if isinstance(s, dict) and s.get('url') == contact.get(url_key)] if isinstance(sources, list) else []
-            if not matching or not any(all(norm(term) in norm(s.get('quote', '')) for term in terms) for s in matching):
+            if not matching or not any(
+                norm(terms[0]) in norm(s.get('quote', '')) and
+                (email_in_quote(terms[1], s.get('quote')) if field_key == 'email' else norm(terms[1]) in norm(s.get('quote', '')))
+                for s in matching
+            ):
                 errors.append(field_key + ': designated quote must link person and value')
     return errors
 
@@ -229,7 +252,8 @@ def duplicate_pairs(records, request):
             for field in ('phone', 'email'):
                 lv = left.get('fields', {}).get(field, {}).get('value', '')
                 rv = right.get('fields', {}).get(field, {}).get('value', '')
-                if lv and rv and norm(lv) == norm(rv):
+                same = lv.strip().casefold() == rv.strip().casefold() if field == 'email' else norm(lv) == norm(rv)
+                if lv and rv and same:
                     collisions.append(field)
             lname = left.get('fields', {}).get('name', {}).get('value', '')
             rname = right.get('fields', {}).get('name', {}).get('value', '')

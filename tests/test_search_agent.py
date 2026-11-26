@@ -62,6 +62,91 @@ class SearchAgentTests(unittest.TestCase):
                 r['identity'] = {}
             self.assertTrue(agent.record_errors(r, request()), change)
 
+    def test_general_email_requires_exact_published_value(self):
+        req = request(1, named=False)
+        req['fields'].append({'key': 'email', 'label': 'Email'})
+        r = record(1, req)
+        email = 'a.b+sales@clinic1.example'
+        r['fields']['email']['value'] = email
+        r['contact'] = {'email_kind': 'general', 'current_role': False, 'person_email_link': False}
+        for quote in (email, 'Email: "A.B+SALES@CLINIC1.EXAMPLE".', 'mailto:' + email,
+                      "Email: '" + email + "'", 'Email: `' + email + '`'):
+            with self.subTest(valid_quote=quote):
+                r['fields']['email']['sources'][0]['quote'] = quote
+                self.assertEqual(agent.record_errors(r, req), [])
+        for quote in ('ab+sales@clinic1.example', 'a.bsales@clinic1.example',
+                      email + '.other', 'other-' + email, 'Контакты указаны на сайте'):
+            with self.subTest(invalid_quote=quote):
+                r['fields']['email']['sources'][0]['quote'] = quote
+                card = agent.apply_operations(agent.new_card(req), [{'kind': 'candidate', 'entity_id': 'clinic', 'payload': r}])
+                self.assertEqual(card['derived']['accepted_count'], 0)
+                self.assertIn('email: quote must contain the exact email', card['derived']['invalid_records']['clinic'])
+        for value in ('not-an-email', 'info@', 'two@@clinic.example', 'info@clinic .example'):
+            with self.subTest(invalid_email=value):
+                r['fields']['email']['value'] = value
+                self.assertIn('email: invalid email', agent.record_errors(r, req))
+
+    def test_named_email_designated_source_preserves_punctuation(self):
+        req = request(1)
+        r = record(1, req)
+        email = 'first.last@clinic1.example'
+        r['fields']['email']['value'] = email
+        person = r['fields']['person']['value']
+        r['fields']['email']['sources'][0]['quote'] = person + ' — firstlast@clinic1.example'
+        r['fields']['email']['sources'].append({
+            'url': 'https://clinic1.example/another-publication',
+            'checked_at': date.today().isoformat(), 'quote': person + ' — ' + email,
+        })
+        self.assertIn('email: designated quote must link person and value', agent.record_errors(r, req))
+        r['fields']['email']['sources'][0]['quote'] = person + ' — ' + email
+        self.assertEqual(agent.record_errors(r, req), [])
+
+    def test_email_dedup_preserves_punctuation(self):
+        req = request(2, named=False)
+        req['fields'].append({'key': 'email', 'label': 'Email'})
+        left, right = record(1, req), record(2, req)
+        left['fields']['email']['value'] = 'a.b@clinic.example'
+        for email in ('ab@clinic.example', 'a+b@clinic.example', 'a_b@clinic.example', 'a-b@clinic.example'):
+            with self.subTest(email=email):
+                right['fields']['email']['value'] = email
+                self.assertEqual(agent.duplicate_pairs({'a': left, 'b': right}, req), [])
+        right['fields']['email']['value'] = 'A.B@CLINIC.EXAMPLE'
+        self.assertEqual(agent.duplicate_pairs({'a': left, 'b': right}, req)[0]['reason'], ['email'])
+
+    def test_unresolved_evidence_conflict_blocks_acceptance_and_export(self):
+        req = request(1)
+        original = record(1, req)
+        card = agent.review(agent.apply_operations(agent.new_card(req), [candidate(1, req)]), 'coordinator')
+        disputed = copy.deepcopy(original)
+        disputed['evidence_conflicts'] = ['Телефон общей поликлиники не подтверждён для стоматологического отделения']
+        card = agent.apply_operations(card, [{'kind': 'candidate', 'entity_id': 'demo-001', 'payload': disputed}])
+        self.assertEqual(card['derived']['accepted_count'], 0)
+        self.assertEqual(card['derived']['candidate_ids'], ['demo-001'])
+        with self.assertRaises(agent.Invalid):
+            agent.review(card, 'coordinator')
+        with self.assertRaises(agent.Invalid):
+            agent.records_for_export(card)
+        corrected = copy.deepcopy(disputed)
+        corrected['fields']['phone']['value'] = '+7 (000) 111-1111'
+        corrected['fields']['phone']['sources'][0]['quote'] = 'Стоматологическое отделение: +7 (000) 111-1111'
+        corrected['reason'] = 'Подтверждён телефон стоматологического отделения'
+        corrected['evidence_conflicts'] = []
+        with tempfile.TemporaryDirectory() as root:
+            store = agent.Store(root)
+            store.save(agent.apply_operations(card, [{'kind': 'candidate', 'entity_id': 'demo-001', 'payload': corrected}]))
+            resumed = agent.Store(root).read(card['code'])
+            self.assertEqual(resumed['derived']['accepted_count'], 1)
+            self.assertFalse(resumed['derived']['review_ok'])
+            self.assertEqual(resumed['events'][-2]['payload']['evidence_conflicts'], disputed['evidence_conflicts'])
+            self.assertEqual(len(agent.records_for_export(agent.review(resumed, 'coordinator'))), 1)
+
+    def test_malformed_evidence_conflicts_fail_closed(self):
+        for conflicts in (None, 'не проверено', {}, [None], ['']):
+            with self.subTest(conflicts=conflicts):
+                r = record()
+                r['evidence_conflicts'] = conflicts
+                self.assertIn('evidence_conflicts must be a list of nonempty reasons', agent.record_errors(r, request()))
+
     def test_real_mode_rejects_fixture_sources(self):
         req = request(1)
         req.pop('demo')
